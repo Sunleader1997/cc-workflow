@@ -375,7 +375,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Empty state -->
-      <div v-else class="empty-state">
+      <div v-if="!currentWf" class="empty-state">
         <div class="empty-icon">🔗</div>
         <h2>Claude Code Workflow Orchestrator</h2>
         <p>Start a task in Claude Code and a workflow will appear here automatically.</p>
