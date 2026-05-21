@@ -96,7 +96,7 @@ done
 ## Tips
 
 - **Detail field**: Keep under 60 chars, be specific: `"Created 5 files, 200 lines"` not `"Done"`
-- **Layout**: Space nodes 130px vertically (y: 50, 180, 310...), center at x=250
+- **Layout**: Space nodes 200px horizontally (x: 50, 250, 450...), center at y=200
 - **Edge IDs**: Use `e<source>_<target>` format (e.g., `e1_2`)
 - **User edits**: Always call `check_node.sh` before updating to handle mid-execution changes
 

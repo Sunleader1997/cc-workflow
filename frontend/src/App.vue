@@ -200,8 +200,8 @@ function cancelEditNode() {
 function addNode() {
   const id = `node_${Date.now()}`
   const lastNode = nodes.value[nodes.value.length - 1]
-  const y = lastNode ? lastNode.position.y + 120 : 50
-  const x = lastNode ? lastNode.position.x : 250
+  const x = lastNode ? lastNode.position.x + 200 : 50
+  const y = lastNode ? lastNode.position.y : 200
   nodes.value.push({
     id,
     type: 'workflow',

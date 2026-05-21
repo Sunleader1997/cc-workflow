@@ -26,14 +26,14 @@ const statusClass = computed(() => `status-${props.data?.status || 'pending'}`)
 
 <template>
   <div class="workflow-node" :class="statusClass">
-    <Handle type="target" :position="Position.Top" />
+    <Handle type="target" :position="Position.Left" />
     <div class="node-header">
       <span class="node-icon">{{ statusIcon }}</span>
       <span class="node-label">{{ data?.label || 'Task' }}</span>
     </div>
     <div v-if="data?.description" class="node-desc">{{ data.description }}</div>
     <div v-if="data?.detail" class="node-detail">{{ data.detail }}</div>
-    <Handle type="source" :position="Position.Bottom" />
+    <Handle type="source" :position="Position.Right" />
   </div>
 </template>
 
