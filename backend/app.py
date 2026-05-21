@@ -120,6 +120,27 @@ async def delete_workflow(wf_id: str):
 
 # --------------- Confirm / Start ---------------
 
+@app.post("/api/workflows/{wf_id}/save")
+async def save_workflow(wf_id: str, body: WorkflowUpdate):
+    """User saves edits to the workflow before confirming."""
+    if wf_id not in workflows:
+        raise HTTPException(404, "Workflow not found")
+    wf = workflows[wf_id]
+    if body.title is not None:
+        wf.title = body.title
+    if body.description is not None:
+        wf.description = body.description
+    if body.nodes is not None:
+        wf.nodes = body.nodes
+    if body.edges is not None:
+        wf.edges = body.edges
+    if body.status is not None:
+        wf.status = body.status
+    wf.updated_at = _now()
+    await _broadcast(wf_id, "workflow_saved", wf.model_dump())
+    return wf
+
+
 @app.post("/api/workflows/{wf_id}/confirm")
 async def confirm_workflow(wf_id: str):
     """User confirms the workflow, marking it ready to run."""
@@ -146,6 +167,44 @@ async def start_workflow(wf_id: str):
     wf.updated_at = _now()
     await _broadcast(wf_id, "workflow_started", wf.model_dump())
     return wf
+
+
+@app.get("/api/workflows/{wf_id}/next-node")
+async def get_next_node(wf_id: str):
+    """Get the next pending node to execute, respecting edge topology.
+
+    A node is "ready" when all its predecessors (edges pointing to it)
+    are in completed or skipped state. Returns the first ready pending node
+    sorted by visual position (y coordinate).
+    """
+    if wf_id not in workflows:
+        raise HTTPException(404, "Workflow not found")
+    wf = workflows[wf_id]
+
+    pending = [n for n in wf.nodes if n.data.status == NodeStatus.PENDING]
+    if not pending:
+        return {"node": None, "message": "All nodes completed"}
+
+    # Fast lookup: node id -> status
+    status_by_id = {n.id: n.data.status for n in wf.nodes}
+
+    def is_ready(node: WorkflowNode) -> bool:
+        """All predecessor nodes are completed or skipped."""
+        for edge in wf.edges:
+            if edge.target == node.id:
+                pred_status = status_by_id.get(edge.source)
+                if pred_status not in (NodeStatus.COMPLETED, NodeStatus.SKIPPED):
+                    return False
+        return True
+
+    ready_nodes = [n for n in pending if is_ready(n)]
+    if ready_nodes:
+        ready_nodes.sort(key=lambda n: n.position.y)
+        return {"node": ready_nodes[0].model_dump(), "message": "Next node found"}
+
+    # Fallback: no node has all predecessors done — return first pending by position
+    pending.sort(key=lambda n: n.position.y)
+    return {"node": pending[0].model_dump(), "message": "Next node found (fallback)"}
 
 
 # --------------- Node progress update ---------------

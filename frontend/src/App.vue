@@ -18,6 +18,11 @@ const sseConnection = ref(null)
 const statusMessage = ref('')
 const editingTitle = ref(false)
 
+// Node editing
+const editingNode = ref(null)
+const editLabel = ref('')
+const editDescription = ref('')
+
 const { onConnect, addEdges, onNodesChange, onEdgesChange, removeNodes, removeEdges, fitView } = useVueFlow()
 
 // --- API helpers ---
@@ -165,6 +170,31 @@ async function deleteWorkflow(wfId) {
     if (sseConnection.value) sseConnection.value.close()
   }
   await loadWorkflows()
+}
+
+function openEditNode(node) {
+  editingNode.value = node
+  editLabel.value = node.data?.label || ''
+  editDescription.value = node.data?.description || ''
+}
+
+function saveEditNode() {
+  if (!editingNode.value) return
+  const node = nodes.value.find(n => n.id === editingNode.value.id)
+  if (node) {
+    node.data = { ...node.data, label: editLabel.value, description: editDescription.value }
+    // Trigger reactivity by creating new array reference
+    nodes.value = nodes.value.map(n => n.id === node.id ? { ...node } : n)
+  }
+  editingNode.value = null
+  editLabel.value = ''
+  editDescription.value = ''
+}
+
+function cancelEditNode() {
+  editingNode.value = null
+  editLabel.value = ''
+  editDescription.value = ''
 }
 
 function addNode() {
@@ -315,12 +345,33 @@ onUnmounted(() => {
           fit-view-on-init
         >
           <template #node-workflow="nodeProps">
-            <WorkflowNode :data="nodeProps.data" />
+            <div @dblclick="openEditNode(nodeProps)">
+              <WorkflowNode :data="nodeProps.data" />
+            </div>
           </template>
           <Background :gap="20" :size="1" />
           <Controls />
           <MiniMap />
         </VueFlow>
+      </div>
+
+      <!-- Node edit modal -->
+      <div v-if="editingNode" class="modal-overlay" @click.self="cancelEditNode">
+        <div class="modal-content">
+          <h3>Edit Node</h3>
+          <div class="form-group">
+            <label>Label</label>
+            <input v-model="editLabel" class="form-input" placeholder="Node label" @keydown.enter="saveEditNode" />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea v-model="editDescription" class="form-input" rows="3" placeholder="What this step does"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" @click="cancelEditNode">Cancel</button>
+            <button class="btn btn-primary" @click="saveEditNode">Save</button>
+          </div>
+        </div>
       </div>
 
       <!-- Empty state -->
@@ -527,4 +578,66 @@ onUnmounted(() => {
 .empty-state h2 { font-size: 22px; color: var(--text-primary); }
 .empty-state p { font-size: 14px; }
 .hint { font-size: 12px; color: var(--text-secondary); max-width: 400px; text-align: center; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.modal-content h3 {
+  margin: 0 0 16px 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+.form-group {
+  margin-bottom: 14px;
+}
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+.form-input:focus {
+  border-color: var(--accent);
+}
+textarea.form-input {
+  resize: vertical;
+  font-family: inherit;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
 </style>

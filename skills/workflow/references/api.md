@@ -92,13 +92,60 @@ DELETE /api/workflows/:id
 
 Response: `{"ok": true}`
 
+### Save Workflow (user edits)
+
+```
+POST /api/workflows/:id/save
+```
+
+Same body as `PUT /api/workflows/:id`. Called by the UI when the user saves edits before confirming. Triggers `workflow_saved` SSE event.
+
 ### Confirm Workflow
 
 ```
 POST /api/workflows/:id/confirm
 ```
 
-Changes status from `pending_user_confirm` to `confirmed`. Called by the user via the UI.
+Changes status from `pending_user_confirm` to `confirmed`. Called by the user via the UI after reviewing/editing. Triggers `workflow_confirmed` SSE event.
+
+### Start Workflow
+
+```
+POST /api/workflows/:id/start
+```
+
+Changes status to `running` and resets all node statuses to `pending`. Called by Claude Code before execution. Triggers `workflow_started` SSE event.
+
+### Get Next Pending Node
+
+```
+GET /api/workflows/:id/next-node
+```
+
+Returns the next node that should be executed, respecting edge topology. A node is "ready" when all its predecessors (nodes with edges pointing to it) are in `completed` or `skipped` state.
+
+Response:
+```json
+{
+  "node": {
+    "id": "n2",
+    "type": "workflow",
+    "position": {"x": 250, "y": 180},
+    "data": {
+      "label": "Step 2: Models",
+      "description": "Create DB models",
+      "status": "pending",
+      "detail": ""
+    }
+  },
+  "message": "Next node found"
+}
+```
+
+If all nodes are completed:
+```json
+{"node": null, "message": "All nodes completed"}
+```
 
 ### Update Node Status
 
@@ -116,6 +163,8 @@ Body:
 
 Status values: `pending`, `in_progress`, `completed`, `failed`, `skipped`
 
+If the node does not exist, returns 404.
+
 ### SSE Events (per workflow)
 
 ```
@@ -124,9 +173,10 @@ GET /api/workflows/:id/events
 
 SSE stream. Event types:
 - `workflow_created` — new workflow created
+- `workflow_saved` — user saved edits
 - `workflow_confirmed` — user confirmed
 - `workflow_started` — execution started
-- `workflow_updated` — workflow modified
+- `workflow_updated` — workflow modified via PUT
 - `node_status_changed` — node status changed
 
 ### SSE Events (global)

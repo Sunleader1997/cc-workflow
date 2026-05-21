@@ -1,0 +1,15 @@
+[Unit]
+Description=Claude Code Workflow Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cc-workflow
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cc-workflow
+
+[Install]
+WantedBy=multi-user.target

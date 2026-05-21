@@ -88,7 +88,7 @@ The script prints the workflow ID. Save it — you need it for all subsequent ca
 
 Say:
 
-> I've created a workflow with N steps. Review it on the workflow UI — you can modify nodes and edges, then click "Confirm Workflow" when ready.
+> I've created a workflow with N steps. Review it on the workflow UI — you can add, remove, or edit nodes, then click "Save" and "Confirm Workflow" when ready.
 >
 > **Current API URL:** `${WORKFLOW_API_URL:-https://sunleader.top:9888}` (set `WORKFLOW_API_URL` env var to override)
 
@@ -98,20 +98,62 @@ Then poll for confirmation:
 bash scripts/poll_status.sh <workflow_id>
 ```
 
-This polls every 5 seconds until the status changes to `confirmed`. If the user says "just go ahead" or "skip confirmation" in the chat, stop polling and proceed.
+This polls every 5 seconds until the status changes to `confirmed`. On confirmation, it prints the full workflow JSON (including any user edits to nodes/edges). **Capture this output** — it contains the latest workflow state after user edits.
 
-### 4. Execute and report progress
+If the user says "just go ahead" or "skip confirmation" in the chat, stop polling and proceed.
 
-For each step, update the node status before and after:
+### 4. Execute and report progress (dynamic)
 
-**Before starting a step:**
+Claude Code does **not** assume a fixed node list. The user may edit the workflow during execution. Follow this pattern for each step:
+
+**A. Before each step, check the node still exists and get the next one:**
+
+```bash
+# Check if the planned node still exists
+bash scripts/check_node.sh <workflow_id> <node_id>
+
+# Or query for the next pending node dynamically
+bash scripts/next_node.sh <workflow_id>
+```
+
+**B. Update the node status before starting:**
 ```bash
 bash scripts/update_node.sh <workflow_id> <node_id> in_progress "<what you are doing>"
 ```
 
-**After completing a step:**
+**C. After completing:**
 ```bash
 bash scripts/update_node.sh <workflow_id> <node_id> completed "<what was accomplished>"
+```
+
+**D. Then query for the next node (user may have added new ones):**
+```bash
+bash scripts/next_node.sh <workflow_id>
+```
+
+If `next_node.sh` returns `null`, all nodes are done. Otherwise, continue with the returned node.
+
+**Alternative: Simple sequential execution**
+
+If the user hasn't edited the workflow and you want to stick to the original plan, you can still iterate over the confirmed nodes directly. But always call `check_node.sh` before starting a node to handle mid-execution deletions:
+
+```bash
+# Get latest workflow after confirmation
+workflow_json=$(bash scripts/poll_status.sh <workflow_id> | tail -n 1)
+
+# Extract node IDs
+node_ids=$(echo "$workflow_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(n['id'] for n in d['nodes']))")
+
+for node_id in $node_ids; do
+    # Verify node still exists
+    if ! bash scripts/check_node.sh <workflow_id> "$node_id" > /dev/null 2>&1; then
+        echo "Node $node_id was removed by user, skipping"
+        continue
+    fi
+    bash scripts/update_node.sh <workflow_id> "$node_id" in_progress "..."
+    # ... do work ...
+    bash scripts/update_node.sh <workflow_id> "$node_id" completed "..."
+done
 ```
 
 **If a step fails:**
@@ -146,6 +188,19 @@ bash scripts/update_workflow.sh <workflow_id> '<new_nodes_json>' '<new_edges_jso
 ```
 
 Tell the user what changed and why.
+
+## Helper Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `check_service.sh` | Verify the workflow service is running |
+| `create_workflow.sh` | Create a new workflow |
+| `poll_status.sh` | Wait for user confirmation, outputs full workflow JSON |
+| `get_workflow.sh` | Fetch current workflow state (nodes, edges, status) |
+| `check_node.sh` | Verify a node exists in the workflow |
+| `next_node.sh` | Get the next pending node (respects edge topology) |
+| `update_node.sh` | Update a node's status and detail |
+| `update_workflow.sh` | Replace workflow nodes/edges entirely |
 
 ## Status Values
 
