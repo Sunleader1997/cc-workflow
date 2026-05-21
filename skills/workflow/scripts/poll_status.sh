@@ -1,0 +1,35 @@
+#!/bin/bash
+# Poll workflow status until it changes to "confirmed"
+# Usage: bash poll_status.sh <workflow_id>
+# This will block until the user confirms the workflow on the UI
+
+API="http://localhost:9800"
+WF_ID="$1"
+
+if [ -z "$WF_ID" ]; then
+    echo "Usage: bash poll_status.sh <workflow_id>"
+    exit 1
+fi
+
+echo "Waiting for user to confirm workflow $WF_ID..."
+echo "Open http://localhost:5173 to review and confirm."
+
+while true; do
+    status=$(curl -s "$API/api/workflows/$WF_ID" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null)
+
+    if [ "$status" = "confirmed" ]; then
+        echo "CONFIRMED"
+        exit 0
+    elif [ "$status" = "completed" ] || [ "$status" = "running" ]; then
+        echo "Status: $status (already started)"
+        exit 0
+    elif [ "$status" = "failed" ]; then
+        echo "FAILED: Workflow is in failed state"
+        exit 1
+    elif [ -z "$status" ]; then
+        echo "ERROR: Cannot reach workflow service"
+        exit 1
+    fi
+
+    sleep 5
+done

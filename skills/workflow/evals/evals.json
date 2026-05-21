@@ -10,7 +10,7 @@
     {
       "id": 2,
       "prompt": "Refactor the backend/app.py file to use a proper database instead of in-memory storage, add migration support, and update the tests",
-      "expected_output": "A workflow with 3-4 nodes covering: database setup, model migration, code refactor, test updates. Should use the workflow skill proactively.",
+      "expected_output": "A workflow with 3-4 nodes covering: database setup, model migration, code refactor, test updates.",
       "files": ["backend/app.py"]
     },
     {
