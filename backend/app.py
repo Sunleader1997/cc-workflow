@@ -294,13 +294,26 @@ async def health():
     return {"status": "ok", "workflows": len(workflows)}
 
 
-# Serve frontend static files when running as PyInstaller bundle
-if getattr(sys, 'frozen', False):
+# Serve frontend static files
+# Priority: 1) CC_WORKFLOW_STATIC_DIR env var  2) PyInstaller bundle  3) Auto-detect relative path
+static_dir = None
+if os.environ.get("CC_WORKFLOW_STATIC_DIR"):
+    static_dir = os.environ["CC_WORKFLOW_STATIC_DIR"]
+elif getattr(sys, 'frozen', False):
     static_dir = os.path.join(sys._MEIPASS, "frontend", "dist")
-    if os.path.exists(static_dir):
-        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+else:
+    # Auto-detect: app.py is in backend/, dist is in ../frontend/dist
+    auto = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+    auto = os.path.abspath(auto)
+    if os.path.exists(auto):
+        static_dir = auto
+
+if static_dir and os.path.exists(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=9800)
+    host = os.environ.get("CC_WORKFLOW_HOST", "0.0.0.0")
+    port = int(os.environ.get("CC_WORKFLOW_PORT", "9800"))
+    uvicorn.run(app, host=host, port=port)
