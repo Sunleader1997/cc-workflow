@@ -6,7 +6,7 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import WorkflowNode from './components/WorkflowNode.vue'
 
-const API = 'http://localhost:9800/api'
+const API = `${window.location.protocol}//${window.location.host}/api`
 
 // State
 const workflows = ref([])
