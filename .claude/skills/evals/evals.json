@@ -1,0 +1,23 @@
+{
+  "skill_name": "workflow",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Create a REST API with FastAPI that has user authentication, a SQLite database, and unit tests",
+      "expected_output": "A workflow with 4-5 nodes covering: setup, models, auth, routes, tests. Claude Code should create the workflow, wait for confirmation, then update node status as it works.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Refactor the backend/app.py file to use a proper database instead of in-memory storage, add migration support, and update the tests",
+      "expected_output": "A workflow with 3-4 nodes covering: database setup, model migration, code refactor, test updates. Should use the workflow skill proactively.",
+      "files": ["backend/app.py"]
+    },
+    {
+      "id": 3,
+      "prompt": "Plan and build a CLI tool that converts CSV files to JSON, with support for custom delimiters and output formatting",
+      "expected_output": "A workflow with 3-5 nodes covering: argument parsing, CSV parsing, JSON output, formatting options, testing.",
+      "files": []
+    }
+  ]
+}

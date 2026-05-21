@@ -1,119 +1,205 @@
 ---
 name: workflow
 description: >
-  Orchestrate and visualize task workflows on Vue Flow.
-  Use this skill at the START of any non-trivial task to plan the workflow,
-  then update progress as you work through each step.
-trigger: >
-  When given a multi-step task, complex request, or when the user asks to
-  "plan", "orchestrate", or "visualize" a workflow. Also use proactively
-  for tasks with 3+ steps.
+  Orchestrate and visualize task workflows on a Vue Flow interactive graph.
+  Use this skill proactively at the START of any multi-step task (3+ steps) to
+  plan the workflow before executing. Also trigger when the user asks to "plan",
+  "orchestrate", "visualize", "workflow", "break down", or "step by step".
+  This skill creates a visual workflow on the UI, waits for user approval,
+  then reports real-time progress as each step executes.
 ---
 
-# Workflow Orchestrator Skill
+# Workflow Orchestrator
 
-This skill integrates Claude Code with a Vue Flow-based workflow visualization system.
+This skill connects Claude Code to a Vue Flow workflow visualization service.
+When you receive a complex task, you plan it as a graph of steps, present it to
+the user for approval on a visual UI, then execute while streaming progress updates.
 
-## API Base URL
+## Why use this skill?
 
-The workflow API runs at: **http://localhost:9800**
+Without this skill, you'd just start working on the task silently. With it:
+- The user sees your plan before you start (and can adjust it)
+- Progress is visible in real-time on a visual graph
+- The user knows exactly what you're doing at each moment
 
-## Step 1: Plan the Workflow
+## API
 
-When starting a task, first analyze what needs to be done and break it into clear steps.
+The workflow service runs at `http://localhost:9800`. Check it's alive first:
 
-## Step 2: Create the Workflow
+```bash
+curl -s http://localhost:9800/api/health
+```
 
-Use `curl` to create a workflow via the API:
+If it's not running, tell the user to start it with `./start.sh` in the project root.
+
+## Workflow
+
+### 1. Check the service is available
+
+```bash
+curl -s http://localhost:9800/api/health
+```
+
+If this fails, tell the user: "The workflow service is not running. Please start it with `./start.sh`." Then fall back to executing the task normally without visualization.
+
+### 2. Plan the steps
+
+Analyze the task and break it into 3-8 concrete steps. Each step should be:
+- **Specific**: "Create user model with SQLAlchemy" not "Handle database"
+- **Atomic**: one clear outcome per step
+- **Ordered**: dependencies flow top-to-bottom
+
+### 3. Create the workflow
+
+POST the workflow to the API. Use short, descriptive node IDs like `n1`, `n2`, etc.
 
 ```bash
 curl -s -X POST http://localhost:9800/api/workflows \
   -H 'Content-Type: application/json' \
   -d '{
-    "title": "<task title>",
-    "description": "<task description>",
+    "title": "<short task title>",
+    "description": "<one-line summary>",
     "nodes": [
       {
-        "id": "node_1",
+        "id": "n1",
         "type": "workflow",
         "position": {"x": 250, "y": 50},
-        "data": {"label": "Step 1: <name>", "description": "<what this does>", "status": "pending"}
+        "data": {
+          "label": "Step 1: <concise name>",
+          "description": "<what this step does>",
+          "status": "pending"
+        }
       },
       {
-        "id": "node_2",
+        "id": "n2",
         "type": "workflow",
         "position": {"x": 250, "y": 180},
-        "data": {"label": "Step 2: <name>", "description": "<what this does>", "status": "pending"}
+        "data": {
+          "label": "Step 2: <concise name>",
+          "description": "<what this step does>",
+          "status": "pending"
+        }
       }
     ],
     "edges": [
-      {"id": "e_1_2", "source": "node_1", "target": "node_2", "animated": true}
+      {"id": "e1", "source": "n1", "target": "n2", "animated": true}
     ]
   }'
 ```
 
-Save the returned `id` as `WF_ID`.
+Save the returned `id` — you'll need it for all subsequent calls as `$WF_ID`.
 
-### Layout Guidelines
-
-- Space nodes vertically by ~130px (y increments)
+**Layout rules:**
+- Space nodes 130px apart vertically (y: 50, 180, 310, 440, ...)
 - Center horizontally at x=250
 - For parallel branches, offset x by ±200
-- Use descriptive labels: "Step 1: Setup Database", "Step 2: Create API Routes"
-- Keep descriptions concise but informative
+- Edge IDs: `e<source>_<target>` (e.g., `e1_2`)
 
-## Step 3: Wait for User Confirmation
+### 4. Tell the user and wait for confirmation
 
-After creating the workflow, tell the user:
+Say something like:
 
-> Workflow created and displayed on the UI. Please review and confirm it at http://localhost:5173.
-> The workflow is ready for your review. You can modify nodes and edges on the page, then click "Confirm Workflow" when ready.
+> I've created a workflow with N steps. Review it at http://localhost:5173 — you can modify nodes and edges, then click "Confirm Workflow" when ready.
 
-Then **wait** for the user to confirm. Check periodically:
+Then poll for confirmation:
 
 ```bash
-curl -s http://localhost:9800/api/workflows/$WF_ID | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])"
+curl -s http://localhost:9800/api/workflows/$WF_ID \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])"
 ```
 
-Poll every 5-10 seconds until status changes from `pending_user_confirm` to `confirmed`.
+Poll every 5-10 seconds. Stop when status becomes `confirmed`.
 
-## Step 4: Execute and Update Progress
+**Important**: If the user says "just go ahead" or "skip confirmation" in the chat, stop polling and proceed immediately.
 
-Once confirmed, work through each step and update the node status:
+### 5. Execute and report progress
 
-### Mark a node as in_progress:
+For each step, update the node status before and after:
+
+**Before starting a step:**
 ```bash
-curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/node_1/status \
+curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/<node_id>/status \
   -H 'Content-Type: application/json' \
-  -d '{"status": "in_progress", "detail": "Currently working on this..."}'
+  -d '{"status": "in_progress", "detail": "<what you are doing>"}'
 ```
 
-### Mark a node as completed:
+**After completing a step:**
 ```bash
-curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/node_1/status \
+curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/<node_id>/status \
   -H 'Content-Type: application/json' \
-  -d '{"status": "completed", "detail": "Done: created 3 files, 150 lines"}'
+  -d '{"status": "completed", "detail": "<what was accomplished>"}'
 ```
 
-### Mark a node as failed:
+**If a step fails:**
 ```bash
-curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/node_1/status \
+curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/<node_id>/status \
   -H 'Content-Type: application/json' \
-  -d '{"status": "failed", "detail": "Error: connection timeout"}'
+  -d '{"status": "failed", "detail": "<what went wrong>"}'
 ```
+
+**If you need to skip a step:**
+```bash
+curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/<node_id>/status \
+  -H 'Content-Type: application/json' \
+  -d '{"status": "skipped", "detail": "<why it was skipped>"}'
+```
+
+### 6. Detail field guidelines
+
+The `detail` field appears below the node on the UI. Keep it:
+- **Short**: one line, under 60 characters
+- **Informative**: what was done, not what you're about to do
+- **Quantitative when possible**: "Created 5 files, 200 lines" is better than "Done"
+
+Good examples:
+- `"Writing database models..."`
+- `"Created 3 API routes with auth"`
+- `"Failed: missing dependency 'sqlalchemy'"`
+- `"All 12 tests passed in 0.3s"`
+
+### 7. If the plan changes mid-execution
+
+If you discover the plan needs adjustment during execution:
+1. Use PUT to update the workflow:
+
+```bash
+curl -s -X PUT http://localhost:9800/api/workflows/$WF_ID \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "nodes": [/* updated nodes */],
+    "edges": [/* updated edges */]
+  }'
+```
+
+2. Tell the user what changed and why.
 
 ## Status Values
 
-- `pending` - Not started yet
-- `in_progress` - Currently being worked on
-- `completed` - Successfully finished
-- `failed` - Encountered an error
-- `skipped` - Intentionally skipped
+| Status | Meaning | When to use |
+|--------|---------|-------------|
+| `pending` | Not started | Default state |
+| `in_progress` | Currently working | When you begin a step |
+| `completed` | Successfully done | When a step finishes |
+| `failed` | Error occurred | When a step fails |
+| `skipped` | Intentionally skipped | When a step is unnecessary |
 
-## Important Rules
+## Quick Reference
 
-1. **Always create the workflow BEFORE starting work** - the user needs to see and approve the plan
-2. **Update status in real-time** - mark nodes as in_progress when you start, completed when done
-3. **Use detail field** - briefly describe what was done or what failed
-4. **Keep the workflow accurate** - if the plan changes during execution, update the workflow via PUT
-5. **Don't block on confirmation forever** - if the user says "just go ahead", proceed without waiting
+```bash
+# Health check
+curl -s http://localhost:9800/api/health
+
+# Create workflow
+curl -s -X POST http://localhost:9800/api/workflows -H 'Content-Type: application/json' -d '{...}'
+
+# Get workflow status
+curl -s http://localhost:9800/api/workflows/$WF_ID
+
+# Update node status
+curl -s -X POST http://localhost:9800/api/workflows/$WF_ID/nodes/$NODE_ID/status \
+  -H 'Content-Type: application/json' -d '{"status": "...", "detail": "..."}'
+
+# Update entire workflow (plan change)
+curl -s -X PUT http://localhost:9800/api/workflows/$WF_ID \
+  -H 'Content-Type: application/json' -d '{...}'
+```
