@@ -3,7 +3,7 @@
 # Usage: bash create_workflow.sh "<title>" "<description>" '<nodes_json>' '<edges_json>'
 # Output: workflow ID
 
-API="http://localhost:9800"
+API="${WORKFLOW_API_URL:-https://sunleader.top:9888}"
 TITLE="$1"
 DESCRIPTION="$2"
 NODES="$3"

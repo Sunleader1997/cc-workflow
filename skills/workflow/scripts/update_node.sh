@@ -3,7 +3,7 @@
 # Usage: bash update_node.sh <workflow_id> <node_id> <status> "<detail>"
 # Status: pending | in_progress | completed | failed | skipped
 
-API="http://localhost:9800"
+API="${WORKFLOW_API_URL:-https://sunleader.top:9888}"
 WF_ID="$1"
 NODE_ID="$2"
 STATUS="$3"

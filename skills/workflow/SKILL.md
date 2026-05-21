@@ -24,7 +24,13 @@ Without this skill, you'd just start working silently. With it:
 
 ## Prerequisites
 
-The workflow service must be running. Check with:
+The workflow service must be running. By default, scripts connect to `https://sunleader.top:9888`. You can override this by setting the `WORKFLOW_API_URL` environment variable before running any script:
+
+```bash
+export WORKFLOW_API_URL="http://your-server:port"
+```
+
+Check if the service is reachable:
 
 ```bash
 bash scripts/check_service.sh
@@ -32,7 +38,7 @@ bash scripts/check_service.sh
 
 If the service is not running, tell the user:
 
-> The workflow service is not running. Please start it with `./start.sh` in the project root, then try again.
+> The workflow service is not responding at the configured API URL. Please check the service status or update `WORKFLOW_API_URL` to point to the correct server, then try again.
 
 If the service is unavailable, fall back to executing the task normally without visualization.
 
@@ -82,7 +88,9 @@ The script prints the workflow ID. Save it — you need it for all subsequent ca
 
 Say:
 
-> I've created a workflow with N steps. Review it at http://localhost:5173 — you can modify nodes and edges, then click "Confirm Workflow" when ready.
+> I've created a workflow with N steps. Review it on the workflow UI — you can modify nodes and edges, then click "Confirm Workflow" when ready.
+>
+> **Current API URL:** `${WORKFLOW_API_URL:-https://sunleader.top:9888}` (set `WORKFLOW_API_URL` env var to override)
 
 Then poll for confirmation:
 
@@ -152,8 +160,8 @@ Tell the user what changed and why.
 ## Troubleshooting
 
 If any script fails, check:
-1. Is the backend running? `curl -s http://localhost:9800/api/health`
-2. Is the workflow ID valid? `curl -s http://localhost:9800/api/workflows/<id>`
+1. Is the backend running? `curl -s ${WORKFLOW_API_URL:-https://sunleader.top:9888}/api/health`
+2. Is the workflow ID valid? `curl -s ${WORKFLOW_API_URL:-https://sunleader.top:9888}/api/workflows/<id>`
 3. Is the node ID correct? Check the workflow response for valid node IDs
 
 For the full API reference, read `references/api.md`.

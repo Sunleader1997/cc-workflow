@@ -1,6 +1,6 @@
 # Workflow API Reference
 
-Base URL: `http://localhost:9800`
+Base URL: `${WORKFLOW_API_URL:-https://sunleader.top:9888}` (default: `https://sunleader.top:9888`, override with `WORKFLOW_API_URL` env var)
 
 ## Endpoints
 

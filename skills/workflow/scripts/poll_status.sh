@@ -3,7 +3,7 @@
 # Usage: bash poll_status.sh <workflow_id>
 # This will block until the user confirms the workflow on the UI
 
-API="http://localhost:9800"
+API="${WORKFLOW_API_URL:-https://sunleader.top:9888}"
 WF_ID="$1"
 
 if [ -z "$WF_ID" ]; then
@@ -12,7 +12,7 @@ if [ -z "$WF_ID" ]; then
 fi
 
 echo "Waiting for user to confirm workflow $WF_ID..."
-echo "Open http://localhost:5173 to review and confirm."
+echo "Review and confirm on the workflow UI."
 
 while true; do
     status=$(curl -s "$API/api/workflows/$WF_ID" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null)

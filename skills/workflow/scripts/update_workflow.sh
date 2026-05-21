@@ -2,7 +2,7 @@
 # Update an existing workflow's nodes and edges
 # Usage: bash update_workflow.sh <workflow_id> '<nodes_json>' '<edges_json>'
 
-API="http://localhost:9800"
+API="${WORKFLOW_API_URL:-https://sunleader.top:9888}"
 WF_ID="$1"
 NODES="$2"
 EDGES="$3"

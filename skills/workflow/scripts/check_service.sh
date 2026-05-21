@@ -2,7 +2,7 @@
 # Check if the workflow service is running
 # Usage: bash check_service.sh
 
-API="http://localhost:9800"
+API="${WORKFLOW_API_URL:-https://sunleader.top:9888}"
 
 response=$(curl -s -o /dev/null -w "%{http_code}" "$API/api/health" 2>/dev/null)
 
