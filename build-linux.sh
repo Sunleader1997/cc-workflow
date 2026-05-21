@@ -28,8 +28,22 @@ cd "$SCRIPT_DIR"
 cat > Dockerfile.build << 'DOCKERFILE'
 FROM quay.io/pypa/manylinux2014_x86_64
 
+# Install build dependencies
+RUN yum install -y gcc make openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel ncurses-devel sqlite-devel readline-devel
+
+# Build Python 3.11 with shared library (manylinux's Python is static-only)
+RUN curl -sL https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz | tar xz -C /tmp && \
+    cd /tmp/Python-3.11.9 && \
+    ./configure --prefix=/opt/python-shared --enable-shared --with-ensurepip=yes && \
+    make -j$(nproc) && \
+    make install && \
+    rm -rf /tmp/Python-3.11.9
+
+ENV PATH=/opt/python-shared/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/python-shared/lib:$LD_LIBRARY_PATH
+
 # Install Python dependencies
-RUN /opt/python/cp311-cp311/bin/pip install --no-cache-dir \
+RUN pip install --no-cache-dir \
     pyinstaller \
     fastapi==0.115.12 \
     uvicorn==0.34.2 \
@@ -44,7 +58,7 @@ COPY . .
 
 # Build executable with PyInstaller
 RUN cd /app && \
-    /opt/python/cp311-cp311/bin/pyinstaller --clean --onefile \
+    pyinstaller --clean --onefile \
     --name workflow-orchestrator \
     --add-data "frontend/dist:frontend/dist" \
     --hidden-import uvicorn \
