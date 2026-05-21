@@ -10,6 +10,8 @@ const os = require("os");
 const BACKEND_DIR = path.resolve(__dirname, "..", "backend");
 const STATIC_DIR = path.resolve(__dirname, "..", "frontend", "dist");
 const REQUIREMENTS = path.resolve(BACKEND_DIR, "requirements.txt");
+const PID_DIR = path.join(os.homedir(), ".cc-workflow");
+const PID_FILE = path.join(PID_DIR, "pid");
 
 function log(msg) {
   console.log(`[cc-workflow] ${msg}`);
@@ -46,7 +48,6 @@ function ensurePythonDeps(pythonCmd, pipCmd) {
   const marker = path.join(BACKEND_DIR, ".deps_installed");
   const requirementsContent = fs.readFileSync(REQUIREMENTS, "utf-8");
 
-  // Check if already installed and marker matches requirements hash
   let currentHash = "";
   if (fs.existsSync(marker)) {
     try {
@@ -62,7 +63,6 @@ function ensurePythonDeps(pythonCmd, pipCmd) {
     return;
   }
 
-  // Check for offline wheels directory
   const wheelsDir = path.join(BACKEND_DIR, "wheels");
   const hasWheels = fs.existsSync(wheelsDir) && fs.readdirSync(wheelsDir).some(f => f.endsWith(".whl"));
 
@@ -99,69 +99,84 @@ function ensurePythonDeps(pythonCmd, pipCmd) {
   }
 }
 
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const result = { port: 9800, host: "0.0.0.0", background: false, help: false };
+function savePid(pid) {
+  try {
+    fs.mkdirSync(PID_DIR, { recursive: true });
+    fs.writeFileSync(PID_FILE, String(pid));
+  } catch (e) {
+    // Non-critical: PID file is only for convenience
+  }
+}
 
+function readPid() {
+  try {
+    return parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
+  } catch {
+    return null;
+  }
+}
+
+function clearPid() {
+  try {
+    fs.unlinkSync(PID_FILE);
+  } catch {}
+}
+
+function isProcessRunning(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findProcessByPort(port) {
+  const platform = os.platform();
+  try {
+    if (platform === "darwin" || platform === "linux") {
+      const output = execSync(`lsof -ti:${port}`, { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+      const pids = output.trim().split("\n").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      return pids.length > 0 ? pids : null;
+    } else if (platform === "win32") {
+      const output = execSync(`netstat -ano | findstr :${port}`, { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] });
+      const lines = output.trim().split("\n").filter(l => l.includes("LISTENING"));
+      const pids = lines.map(l => {
+        const parts = l.trim().split(/\s+/);
+        return parseInt(parts[parts.length - 1], 10);
+      }).filter(n => !isNaN(n));
+      return pids.length > 0 ? pids : null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function cmdStart(args) {
+  const opts = { port: 9800, host: "0.0.0.0", background: false };
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === "-p" || arg === "--port") {
-      result.port = parseInt(args[++i], 10);
+      opts.port = parseInt(args[++i], 10);
     } else if (arg === "-h" || arg === "--host") {
-      result.host = args[++i];
+      opts.host = args[++i];
     } else if (arg === "-d" || arg === "--background") {
-      result.background = true;
-    } else if (arg === "--help" || arg === "-?") {
-      result.help = true;
+      opts.background = true;
     } else if (arg.startsWith("--port=")) {
-      result.port = parseInt(arg.split("=")[1], 10);
+      opts.port = parseInt(arg.split("=")[1], 10);
     } else if (arg.startsWith("--host=")) {
-      result.host = arg.split("=")[1];
+      opts.host = arg.split("=")[1];
     }
   }
-  return result;
-}
 
-function showHelp() {
-  console.log(`
-cc-workflow - Claude Code Workflow Orchestrator
-
-Usage: cc-workflow [options]
-
-Options:
-  -p, --port <port>     Server port (default: 9800)
-  -h, --host <host>     Server host (default: 0.0.0.0)
-  -d, --background      Run in background
-      --help            Show this help message
-
-Examples:
-  cc-workflow                    # Start on default port 9800
-  cc-workflow -p 8080            # Start on port 8080
-  cc-workflow -d                 # Run in background
-
-The server will be available at http://<host>:<port>
-`);
-  process.exit(0);
-}
-
-function openBrowser(url) {
-  const platform = os.platform();
-  const cmd =
-    platform === "darwin" ? "open" :
-    platform === "win32" ? "start" :
-    "xdg-open";
-  try {
-    spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
-  } catch {
-    // Silently fail if browser can't be opened
+  // Check if already running
+  const existingPid = readPid();
+  if (existingPid && isProcessRunning(existingPid)) {
+    log(`Server already running (PID: ${existingPid})`);
+    log(`Access at http://${opts.host === "0.0.0.0" ? "localhost" : opts.host}:${opts.port}`);
+    process.exit(0);
   }
-}
 
-function main() {
-  const opts = parseArgs();
-  if (opts.help) showHelp();
-
-  // Verify static files exist
   if (!fs.existsSync(STATIC_DIR)) {
     error(
       `Frontend build not found at ${STATIC_DIR}.\n` +
@@ -196,20 +211,23 @@ function main() {
     detached: opts.background,
   });
 
+  savePid(child.pid);
+
   if (opts.background) {
     child.unref();
     log(`Server started in background (PID: ${child.pid})`);
     log(`Access at http://${opts.host === "0.0.0.0" ? "localhost" : opts.host}:${opts.port}`);
+    log(`Stop with: cc-workflow stop`);
     process.exit(0);
   }
 
-  // Give uvicorn a moment to start, then open browser
   setTimeout(() => {
     const url = `http://${opts.host === "0.0.0.0" ? "localhost" : opts.host}:${opts.port}`;
     openBrowser(url);
   }, 1200);
 
   child.on("exit", (code) => {
+    clearPid();
     process.exit(code ?? 0);
   });
 
@@ -221,6 +239,135 @@ function main() {
   process.on("SIGTERM", () => {
     child.kill("SIGTERM");
   });
+}
+
+function cmdStop() {
+  const pid = readPid();
+  let killed = false;
+
+  if (pid && isProcessRunning(pid)) {
+    try {
+      process.kill(pid, "SIGTERM");
+      killed = true;
+      log(`Stopped process (PID: ${pid})`);
+    } catch (e) {
+      log(`Failed to stop PID ${pid}: ${e.message}`);
+    }
+  }
+
+  // Fallback: find by port
+  const port = process.env.CC_WORKFLOW_PORT || "9800";
+  const pids = findProcessByPort(port);
+  if (pids) {
+    for (const p of pids) {
+      if (p === pid) continue; // Already handled
+      try {
+        process.kill(p, "SIGTERM");
+        killed = true;
+        log(`Stopped process on port ${port} (PID: ${p})`);
+      } catch {}
+    }
+  }
+
+  clearPid();
+
+  if (!killed) {
+    log("No running server found.");
+  }
+}
+
+function cmdStatus() {
+  const pid = readPid();
+  if (pid && isProcessRunning(pid)) {
+    log(`Server is running (PID: ${pid})`);
+    process.exit(0);
+  }
+
+  const port = process.env.CC_WORKFLOW_PORT || "9800";
+  const pids = findProcessByPort(port);
+  if (pids) {
+    log(`Server is running on port ${port} (PID: ${pids.join(", ")})`);
+    process.exit(0);
+  }
+
+  log("Server is not running.");
+  process.exit(1);
+}
+
+function openBrowser(url) {
+  const platform = os.platform();
+  const cmd =
+    platform === "darwin" ? "open" :
+    platform === "win32" ? "start" :
+    "xdg-open";
+  try {
+    spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
+  } catch {
+    // Silently fail if browser can't be opened
+  }
+}
+
+function showHelp() {
+  console.log(`
+cc-workflow - Claude Code Workflow Orchestrator
+
+Usage: cc-workflow <command> [options]
+
+Commands:
+  start [options]       Start the server (default command)
+  stop                  Stop the running server
+  status                Check if server is running
+  --help                Show this help message
+
+Start Options:
+  -p, --port <port>     Server port (default: 9800)
+  -h, --host <host>     Server host (default: 0.0.0.0)
+  -d, --background      Run in background
+
+Examples:
+  cc-workflow                    # Start on default port 9800
+  cc-workflow start -p 8080      # Start on port 8080
+  cc-workflow start -d           # Run in background
+  cc-workflow stop               # Stop the server
+  cc-workflow status             # Check server status
+`);
+  process.exit(0);
+}
+
+function main() {
+  const args = process.argv.slice(2);
+
+  if (args.includes("--help") || args.includes("-?")) {
+    showHelp();
+    return;
+  }
+
+  const command = args[0];
+
+  if (!command || command.startsWith("-")) {
+    // No command or starts with flag → default to start
+    cmdStart(args);
+    return;
+  }
+
+  switch (command) {
+    case "start":
+      cmdStart(args.slice(1));
+      break;
+    case "stop":
+      cmdStop();
+      break;
+    case "status":
+      cmdStatus();
+      break;
+    case "--help":
+    case "-?":
+    case "help":
+      showHelp();
+      break;
+    default:
+      error(`Unknown command: ${command}\nRun 'cc-workflow --help' for usage.`);
+  }
 }
 
 main();
