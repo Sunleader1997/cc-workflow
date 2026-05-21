@@ -11,212 +11,117 @@ description: >
 
 # Workflow Orchestrator
 
-This skill connects Claude Code to a Vue Flow workflow visualization service.
-When you receive a complex task, plan it as a graph of steps, present it to
-the user for approval on a visual UI, then execute while streaming progress updates.
+Visual workflow for Claude Code. Plan → Confirm → Execute with real-time progress.
 
-## Why use this skill?
-
-Without this skill, you'd just start working silently. With it:
-- The user sees your plan before you start (and can adjust it)
-- Progress is visible in real-time on a visual graph
-- The user knows exactly what you're doing at each moment
-
-## Prerequisites
-
-The workflow service must be running. By default, scripts connect to `https://sunleader.top:9888`. You can override this by setting the `WORKFLOW_API_URL` environment variable before running any script:
+## Quick Start
 
 ```bash
-export WORKFLOW_API_URL="http://your-server:port"
-```
-
-Check if the service is reachable:
-
-```bash
+# 1. Check service
 bash scripts/check_service.sh
+
+# 2. Create workflow (returns workflow_id)
+bash scripts/create_workflow.sh "Title" "Description" '<nodes>' '<edges>'
+
+# 3. Wait for user to edit & confirm on UI
+bash scripts/poll_status.sh <workflow_id>  # returns workflow JSON
+
+# 4. Execute loop (repeat for each node)
+bash scripts/update_node.sh <workflow_id> <node_id> in_progress "Working..."
+# ... do work ...
+bash scripts/update_node.sh <workflow_id> <node_id> completed "Done!"
 ```
 
-If the service is not running, tell the user:
+## Execution Modes
 
-> The workflow service is not responding at the configured API URL. Please check the service status or update `WORKFLOW_API_URL` to point to the correct server, then try again.
-
-If the service is unavailable, fall back to executing the task normally without visualization.
-
-## Workflow
-
-### 1. Plan the steps
-
-Analyze the task and break it into 3-8 concrete steps. Each step should be:
-- **Specific**: "Create user model with SQLAlchemy" not "Handle database"
-- **Atomic**: one clear outcome per step
-- **Ordered**: dependencies flow top-to-bottom
-
-### 2. Create the workflow
-
-Use the helper script to create a workflow:
+### Mode 1: Sequential (default)
+Use when workflow structure won't change during execution.
 
 ```bash
-bash scripts/create_workflow.sh "<title>" "<description>" '<nodes_json>' '<edges_json>'
-```
-
-**Example:**
-
-```bash
-bash scripts/create_workflow.sh \
-  "Build REST API" \
-  "FastAPI with auth and tests" \
-  '[
-    {"id":"n1","type":"workflow","position":{"x":250,"y":50},"data":{"label":"Step 1: Setup","description":"Initialize project","status":"pending"}},
-    {"id":"n2","type":"workflow","position":{"x":250,"y":180},"data":{"label":"Step 2: Models","description":"Create DB models","status":"pending"}},
-    {"id":"n3","type":"workflow","position":{"x":250,"y":310},"data":{"label":"Step 3: Auth","description":"Implement authentication","status":"pending"}}
-  ]' \
-  '[
-    {"id":"e1","source":"n1","target":"n2","animated":true},
-    {"id":"e2","source":"n2","target":"n3","animated":true}
-  ]'
-```
-
-The script prints the workflow ID. Save it — you need it for all subsequent calls.
-
-**Layout rules:**
-- Space nodes 130px apart vertically (y: 50, 180, 310, 440, ...)
-- Center horizontally at x=250
-- For parallel branches, offset x by ±200
-- Edge IDs: `e<source>_<target>` (e.g., `e1_2`)
-
-### 3. Tell the user and wait for confirmation
-
-Say:
-
-> I've created a workflow with N steps. Review it on the workflow UI — you can add, remove, or edit nodes, then click "Save" and "Confirm Workflow" when ready.
->
-> **Current API URL:** `${WORKFLOW_API_URL:-https://sunleader.top:9888}` (set `WORKFLOW_API_URL` env var to override)
-
-Then poll for confirmation:
-
-```bash
-bash scripts/poll_status.sh <workflow_id>
-```
-
-This polls every 5 seconds until the status changes to `confirmed`. On confirmation, it prints the full workflow JSON (including any user edits to nodes/edges). **Capture this output** — it contains the latest workflow state after user edits.
-
-If the user says "just go ahead" or "skip confirmation" in the chat, stop polling and proceed.
-
-### 4. Execute and report progress (dynamic)
-
-Claude Code does **not** assume a fixed node list. The user may edit the workflow during execution. Follow this pattern for each step:
-
-**A. Before each step, check the node still exists and get the next one:**
-
-```bash
-# Check if the planned node still exists
-bash scripts/check_node.sh <workflow_id> <node_id>
-
-# Or query for the next pending node dynamically
-bash scripts/next_node.sh <workflow_id>
-```
-
-**B. Update the node status before starting:**
-```bash
-bash scripts/update_node.sh <workflow_id> <node_id> in_progress "<what you are doing>"
-```
-
-**C. After completing:**
-```bash
-bash scripts/update_node.sh <workflow_id> <node_id> completed "<what was accomplished>"
-```
-
-**D. Then query for the next node (user may have added new ones):**
-```bash
-bash scripts/next_node.sh <workflow_id>
-```
-
-If `next_node.sh` returns `null`, all nodes are done. Otherwise, continue with the returned node.
-
-**Alternative: Simple sequential execution**
-
-If the user hasn't edited the workflow and you want to stick to the original plan, you can still iterate over the confirmed nodes directly. But always call `check_node.sh` before starting a node to handle mid-execution deletions:
-
-```bash
-# Get latest workflow after confirmation
-workflow_json=$(bash scripts/poll_status.sh <workflow_id> | tail -n 1)
-
-# Extract node IDs
+# After poll_status.sh returns, extract node IDs and iterate
+workflow_json=$(bash scripts/poll_status.sh <wf_id> | tail -n 1)
 node_ids=$(echo "$workflow_json" | python3 -c "import sys,json; d=json.load(sys.stdin); print(' '.join(n['id'] for n in d['nodes']))")
 
 for node_id in $node_ids; do
-    # Verify node still exists
-    if ! bash scripts/check_node.sh <workflow_id> "$node_id" > /dev/null 2>&1; then
-        echo "Node $node_id was removed by user, skipping"
-        continue
-    fi
-    bash scripts/update_node.sh <workflow_id> "$node_id" in_progress "..."
-    # ... do work ...
-    bash scripts/update_node.sh <workflow_id> "$node_id" completed "..."
+    # Verify node still exists (user may have deleted it)
+    bash scripts/check_node.sh <wf_id> "$node_id" || { echo "Skipped (deleted)"; continue; }
+    
+    bash scripts/update_node.sh <wf_id> "$node_id" in_progress "..."
+    # ... execute step ...
+    bash scripts/update_node.sh <wf_id> "$node_id> completed "..."
 done
 ```
 
-**If a step fails:**
-```bash
-bash scripts/update_node.sh <workflow_id> <node_id> failed "<what went wrong>"
-```
-
-**If you need to skip a step:**
-```bash
-bash scripts/update_node.sh <workflow_id> <node_id> skipped "<why>"
-```
-
-### 5. Detail field guidelines
-
-The `detail` field appears below the node on the UI. Keep it:
-- **Short**: one line, under 60 characters
-- **Informative**: what was done, not what you're about to do
-- **Quantitative when possible**: "Created 5 files, 200 lines" beats "Done"
-
-Good examples:
-- `"Writing database models..."`
-- `"Created 3 API routes with auth"`
-- `"Failed: missing dependency 'sqlalchemy'"`
-- `"All 12 tests passed in 0.3s"`
-
-### 6. If the plan changes mid-execution
-
-If you discover the plan needs adjustment during execution, update the workflow:
+### Mode 2: Dynamic (for live collaboration)
+Use when user may edit workflow during execution.
 
 ```bash
-bash scripts/update_workflow.sh <workflow_id> '<new_nodes_json>' '<new_edges_json>'
+while true; do
+    # Get next pending node (respects edge dependencies)
+    node=$(bash scripts/next_node.sh <wf_id>)
+    
+    # Check if done
+    if [ "$node" = "null" ]; then break; fi
+    
+    node_id=$(echo "$node" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+    
+    bash scripts/update_node.sh <wf_id> "$node_id" in_progress "..."
+    # ... execute step ...
+    bash scripts/update_node.sh <wf_id> "$node_id" completed "..."
+done
 ```
-
-Tell the user what changed and why.
 
 ## Helper Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `check_service.sh` | Verify the workflow service is running |
-| `create_workflow.sh` | Create a new workflow |
-| `poll_status.sh` | Wait for user confirmation, outputs full workflow JSON |
-| `get_workflow.sh` | Fetch current workflow state (nodes, edges, status) |
-| `check_node.sh` | Verify a node exists in the workflow |
-| `next_node.sh` | Get the next pending node (respects edge topology) |
-| `update_node.sh` | Update a node's status and detail |
-| `update_workflow.sh` | Replace workflow nodes/edges entirely |
+| Script | Purpose | Returns |
+|--------|---------|---------|
+| `check_service.sh` | Verify service running | OK/ERROR |
+| `create_workflow.sh` | Create workflow | workflow ID |
+| `poll_status.sh` | Wait for user confirm | workflow JSON |
+| `get_workflow.sh` | Fetch current state | workflow JSON |
+| `check_node.sh` | Verify node exists | node JSON / exit 1 |
+| `next_node.sh` | Get next pending node | node JSON / "null" |
+| `update_node.sh` | Update node status | OK/ERROR |
+| `update_workflow.sh` | Replace nodes/edges | OK/ERROR |
 
-## Status Values
+## Node Status Values
 
 | Status | Meaning | When to use |
 |--------|---------|-------------|
-| `pending` | Not started | Default state |
-| `in_progress` | Currently working | When you begin a step |
-| `completed` | Successfully done | When a step finishes |
-| `failed` | Error occurred | When a step fails |
-| `skipped` | Intentionally skipped | When a step is unnecessary |
+| `pending` | Not started | Default |
+| `in_progress` | Working | Begin a step |
+| `completed` | Done | Finish a step |
+| `failed` | Error | Step failed |
+| `skipped` | Skip | Unnecessary step |
+
+## Tips
+
+- **Detail field**: Keep under 60 chars, be specific: `"Created 5 files, 200 lines"` not `"Done"`
+- **Layout**: Space nodes 130px vertically (y: 50, 180, 310...), center at x=250
+- **Edge IDs**: Use `e<source>_<target>` format (e.g., `e1_2`)
+- **User edits**: Always call `check_node.sh` before updating to handle mid-execution changes
+
+## Prerequisites
+
+Service must be running. Default: `https://sunleader.top:9888`
+
+```bash
+export WORKFLOW_API_URL="http://your-server:port"  # Override if needed
+bash scripts/check_service.sh  # Verify
+```
+
+If service unavailable, fall back to executing without visualization.
 
 ## Troubleshooting
 
-If any script fails, check:
-1. Is the backend running? `curl -s ${WORKFLOW_API_URL:-https://sunleader.top:9888}/api/health`
-2. Is the workflow ID valid? `curl -s ${WORKFLOW_API_URL:-https://sunleader.top:9888}/api/workflows/<id>`
-3. Is the node ID correct? Check the workflow response for valid node IDs
+```bash
+# 1. Check service health
+curl -s ${WORKFLOW_API_URL:-https://sunleader.top:9888}/api/health
 
-For the full API reference, read `references/api.md`.
+# 2. Verify workflow exists
+curl -s ${WORKFLOW_API_URL:-https://sunleader.top:9888}/api/workflows/<id>
+
+# 3. Check node exists
+bash scripts/check_node.sh <workflow_id> <node_id>
+```
+
+For full API reference: `references/api.md`

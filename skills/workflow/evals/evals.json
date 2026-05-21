@@ -1,23 +1,62 @@
 {
   "skill_name": "workflow",
+  "version": "2.0",
   "evals": [
     {
       "id": 1,
+      "name": "Basic workflow creation",
       "prompt": "Create a REST API with FastAPI that has user authentication, a SQLite database, and unit tests",
-      "expected_output": "A workflow with 4-5 nodes covering: setup, models, auth, routes, tests. Claude Code should create the workflow, wait for confirmation, then update node status as it works.",
-      "files": []
+      "expected_behavior": "Claude Code should: 1) Create workflow with 4-5 nodes, 2) Wait for confirmation, 3) Update node status as it works",
+      "files": [],
+      "category": "basic"
     },
     {
       "id": 2,
+      "name": "Sequential execution",
       "prompt": "Refactor the backend/app.py file to use a proper database instead of in-memory storage, add migration support, and update the tests",
-      "expected_output": "A workflow with 3-4 nodes covering: database setup, model migration, code refactor, test updates.",
-      "files": ["backend/app.py"]
+      "expected_behavior": "Claude Code should: 1) Create workflow with 3-4 nodes, 2) Use sequential execution mode, 3) Verify each node before updating",
+      "files": ["backend/app.py"],
+      "category": "sequential"
     },
     {
       "id": 3,
+      "name": "Dynamic node execution",
       "prompt": "Plan and build a CLI tool that converts CSV files to JSON, with support for custom delimiters and output formatting",
-      "expected_output": "A workflow with 3-5 nodes covering: argument parsing, CSV parsing, JSON output, formatting options, testing.",
-      "files": []
+      "expected_behavior": "Claude Code should: 1) Create workflow, 2) Use dynamic execution mode with next_node.sh, 3) Handle potential user edits during execution",
+      "files": [],
+      "category": "dynamic"
+    },
+    {
+      "id": 4,
+      "name": "User edit handling",
+      "prompt": "Build a simple web scraper with error handling and logging",
+      "expected_behavior": "Claude Code should: 1) Create workflow, 2) Poll for confirmation, 3) Handle case where user deletes or adds nodes during execution",
+      "files": [],
+      "category": "edit_handling"
+    },
+    {
+      "id": 5,
+      "name": "Failure recovery",
+      "prompt": "Create a task management API with CRUD operations and authentication",
+      "expected_behavior": "Claude Code should: 1) Create workflow, 2) Mark nodes as failed if errors occur, 3) Continue with remaining nodes",
+      "files": [],
+      "category": "error_handling"
+    },
+    {
+      "id": 6,
+      "name": "Mid-execution plan change",
+      "prompt": "Build a file organizer that sorts files by type and date",
+      "expected_behavior": "Claude Code should: 1) Create initial workflow, 2) Update workflow if plan changes mid-execution, 3) Explain changes to user",
+      "files": [],
+      "category": "plan_change"
     }
+  ],
+  "success_criteria": [
+    "Workflow created with correct structure",
+    "User confirmation polled correctly",
+    "Node statuses updated in real-time",
+    "Dynamic execution handles node additions/deletions",
+    "Failure states handled gracefully",
+    "User edits reflected in execution"
   ]
 }

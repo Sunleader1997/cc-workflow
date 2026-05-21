@@ -1,39 +1,68 @@
 # Workflow API Reference
 
-Base URL: `${WORKFLOW_API_URL:-https://sunleader.top:9888}` (default: `https://sunleader.top:9888`, override with `WORKFLOW_API_URL` env var)
+Base URL: `${WORKFLOW_API_URL:-https://sunleader.top:9888}`
 
 ## Endpoints
 
-### Health Check
+### Health
 
-```
-GET /api/health
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Service health check |
 
-Response:
-```json
-{"status": "ok", "workflows": 3}
-```
+### Workflow CRUD
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/workflows` | Create workflow |
+| GET | `/api/workflows` | List all workflows |
+| GET | `/api/workflows/:id` | Get workflow by ID |
+| PUT | `/api/workflows/:id` | Update workflow |
+| DELETE | `/api/workflows/:id` | Delete workflow |
+
+### Workflow Actions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/workflows/:id/save` | Save user edits (before confirm) |
+| POST | `/api/workflows/:id/confirm` | User confirms workflow |
+| POST | `/api/workflows/:id/start` | Start execution (resets nodes) |
+
+### Node Operations
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/workflows/:id/next-node` | Get next pending node |
+| POST | `/api/workflows/:id/nodes/:nodeId/status` | Update node status |
+
+### SSE Events
+
+| Path | Scope |
+|------|-------|
+| GET | `/api/workflows/:id/events` | Per-workflow events |
+| GET | `/api/events` | All workflow events |
+
+---
+
+## Request/Response Examples
 
 ### Create Workflow
 
-```
+```http
 POST /api/workflows
-```
+Content-Type: application/json
 
-Body:
-```json
 {
-  "title": "Task title",
-  "description": "Task description",
+  "title": "Build REST API",
+  "description": "FastAPI with auth and tests",
   "nodes": [
     {
       "id": "n1",
       "type": "workflow",
       "position": {"x": 250, "y": 50},
       "data": {
-        "label": "Step 1: Name",
-        "description": "What this step does",
+        "label": "Step 1: Setup",
+        "description": "Initialize project",
         "status": "pending"
       }
     }
@@ -49,82 +78,12 @@ Body:
 }
 ```
 
-Response: Full workflow object with generated `id`.
+### Get Next Node
 
-### List Workflows
-
-```
-GET /api/workflows
-```
-
-Response: Array of workflow objects.
-
-### Get Workflow
-
-```
-GET /api/workflows/:id
-```
-
-Response: Single workflow object.
-
-### Update Workflow
-
-```
-PUT /api/workflows/:id
-```
-
-Body (all fields optional):
-```json
-{
-  "title": "New title",
-  "description": "New description",
-  "nodes": [...],
-  "edges": [...],
-  "status": "running"
-}
-```
-
-### Delete Workflow
-
-```
-DELETE /api/workflows/:id
-```
-
-Response: `{"ok": true}`
-
-### Save Workflow (user edits)
-
-```
-POST /api/workflows/:id/save
-```
-
-Same body as `PUT /api/workflows/:id`. Called by the UI when the user saves edits before confirming. Triggers `workflow_saved` SSE event.
-
-### Confirm Workflow
-
-```
-POST /api/workflows/:id/confirm
-```
-
-Changes status from `pending_user_confirm` to `confirmed`. Called by the user via the UI after reviewing/editing. Triggers `workflow_confirmed` SSE event.
-
-### Start Workflow
-
-```
-POST /api/workflows/:id/start
-```
-
-Changes status to `running` and resets all node statuses to `pending`. Called by Claude Code before execution. Triggers `workflow_started` SSE event.
-
-### Get Next Pending Node
-
-```
+```http
 GET /api/workflows/:id/next-node
 ```
 
-Returns the next node that should be executed, respecting edge topology. A node is "ready" when all its predecessors (nodes with edges pointing to it) are in `completed` or `skipped` state.
-
-Response:
 ```json
 {
   "node": {
@@ -142,50 +101,19 @@ Response:
 }
 ```
 
-If all nodes are completed:
-```json
-{"node": null, "message": "All nodes completed"}
-```
-
 ### Update Node Status
 
-```
+```http
 POST /api/workflows/:id/nodes/:nodeId/status
-```
+Content-Type: application/json
 
-Body:
-```json
 {
   "status": "in_progress",
   "detail": "Working on this step..."
 }
 ```
 
-Status values: `pending`, `in_progress`, `completed`, `failed`, `skipped`
-
-If the node does not exist, returns 404.
-
-### SSE Events (per workflow)
-
-```
-GET /api/workflows/:id/events
-```
-
-SSE stream. Event types:
-- `workflow_created` — new workflow created
-- `workflow_saved` — user saved edits
-- `workflow_confirmed` — user confirmed
-- `workflow_started` — execution started
-- `workflow_updated` — workflow modified via PUT
-- `node_status_changed` — node status changed
-
-### SSE Events (global)
-
-```
-GET /api/events
-```
-
-Same as above but for all workflows.
+---
 
 ## Data Models
 
@@ -204,7 +132,7 @@ Same as above but for all workflows.
 }
 ```
 
-### Workflow Status Values
+### Workflow Status
 
 | Status | Description |
 |--------|-------------|
@@ -230,6 +158,16 @@ Same as above but for all workflows.
 }
 ```
 
+### Node Status
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Not started |
+| `in_progress` | Currently executing |
+| `completed` | Successfully done |
+| `failed` | Error occurred |
+| `skipped` | Intentionally skipped |
+
 ### Edge
 
 ```json
@@ -239,4 +177,30 @@ Same as above but for all workflows.
   "target": "n2",
   "animated": true
 }
+```
+
+---
+
+## SSE Events
+
+### Event Types
+
+| Event | Trigger | Data |
+|-------|---------|------|
+| `workflow_created` | POST /workflows | Full workflow |
+| `workflow_saved` | POST /workflows/:id/save | Full workflow |
+| `workflow_confirmed` | POST /workflows/:id/confirm | Full workflow |
+| `workflow_started` | POST /workflows/:id/start | Full workflow |
+| `workflow_updated` | PUT /workflows/:id | Full workflow |
+| `node_status_changed` | POST /.../nodes/:id/status | `{workflow_id, node_id, status, detail, workflow_status}` |
+
+### Example
+
+```javascript
+const es = new EventSource('/api/workflows/abc123/events')
+
+es.addEventListener('node_status_changed', (e) => {
+  const data = JSON.parse(e.data)
+  console.log(`Node ${data.node_id}: ${data.status}`)
+})
 ```
