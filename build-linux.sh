@@ -1,101 +1,124 @@
 #!/bin/bash
-# Build the Claude Code Workflow Orchestrator for Linux with cross-device compatibility
-# Uses Docker to build inside a manylinux container with older glibc
+# Build the Claude Code Workflow Orchestrator for Linux x86_64
+# with maximum compatibility across distributions.
+#
+# Uses Docker to build in an older Linux environment (glibc 2.28),
+# ensuring the binary runs on most modern Linux distros.
+#
+# Usage:
+#   ./build-linux.sh
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_IMAGE="${BASE_IMAGE:-rockylinux:8}"
 
-echo "=== Building Claude Code Workflow Orchestrator (Linux Compatible) ==="
+echo "=== Building for Linux x86_64 (compatible) ==="
+echo "Base image: $BASE_IMAGE"
 echo ""
 
-# Step 1: Build frontend
-echo "Step 1: Building frontend..."
-cd "$SCRIPT_DIR/frontend"
-npm install --silent
-npm run build
-echo "Frontend built to frontend/dist/"
+# Check Docker is available
+if ! command -v docker &> /dev/null; then
+    echo "Error: Docker is required but not installed."
+    exit 1
+fi
+
+# Create the PyInstaller spec file
+cat > "$SCRIPT_DIR/workflow_orchestrator.spec" << 'SPECFILE'
+# -*- mode: python ; coding: utf-8 -*-
+
+block_cipher = None
+
+a = Analysis(
+    ['backend/app.py'],
+    pathex=[],
+    binaries=[],
+    datas=[
+        ('frontend/dist', 'frontend/dist'),
+    ],
+    hiddenimports=[
+        'uvicorn',
+        'uvicorn.logging',
+        'uvicorn.loops',
+        'uvicorn.loops.auto',
+        'uvicorn.protocols',
+        'uvicorn.protocols.http',
+        'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.websockets',
+        'uvicorn.protocols.websockets.auto',
+        'uvicorn.lifespan',
+        'uvicorn.lifespan.on',
+        'fastapi',
+        'sse_starlette',
+        'pydantic',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='workflow-orchestrator',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+SPECFILE
+
+echo "Step 1: Building inside Docker container..."
+docker run --rm \
+    -v "$SCRIPT_DIR:/build" \
+    -w /build \
+    "$BASE_IMAGE" \
+    bash -c '
+        set -e
+
+        # Install system dependencies
+        dnf install -y -q python3 python3-pip nodejs npm gcc
+
+        # Install Python dependencies
+        pip3 install -q pyinstaller fastapi uvicorn sse-starlette pydantic
+
+        # Build frontend
+        echo "  - Building frontend..."
+        cd /build/frontend
+        npm install --silent
+        npm run build
+
+        # Build executable
+        echo "  - Building executable with PyInstaller..."
+        cd /build
+        pyinstaller --clean workflow_orchestrator.spec
+
+        echo "  - Build complete inside container."
+    '
+
 echo ""
-
-# Step 2: Build inside Docker container with manylinux2014 (glibc 2.17)
-echo "Step 2: Building executable inside Docker container..."
-echo "Using manylinux2014_x86_64 for maximum Linux compatibility..."
-echo ""
-
-cd "$SCRIPT_DIR"
-
-# Create a Dockerfile for the build environment
-cat > Dockerfile.build << 'DOCKERFILE'
-FROM quay.io/pypa/manylinux2014_x86_64
-
-# Install build dependencies
-RUN yum install -y gcc make openssl-devel bzip2-devel libffi-devel zlib-devel xz-devel ncurses-devel sqlite-devel readline-devel
-
-# Build Python 3.11 with shared library (manylinux's Python is static-only)
-RUN curl -sL https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tgz | tar xz -C /tmp && \
-    cd /tmp/Python-3.11.9 && \
-    ./configure --prefix=/opt/python-shared --enable-shared --with-ensurepip=yes && \
-    make -j$(nproc) && \
-    make install && \
-    rm -rf /tmp/Python-3.11.9
-
-ENV PATH=/opt/python-shared/bin:$PATH
-ENV LD_LIBRARY_PATH=/opt/python-shared/lib:$LD_LIBRARY_PATH
-
-# Install Python dependencies
-RUN pip install --no-cache-dir \
-    pyinstaller \
-    fastapi==0.115.12 \
-    uvicorn==0.34.2 \
-    sse-starlette==2.3.5 \
-    pydantic==2.11.3
-
-# Set working directory
-WORKDIR /app
-
-# Copy project files (frontend/dist already built on host)
-COPY . .
-
-# Build executable with PyInstaller
-RUN cd /app && \
-    pyinstaller --clean --onefile \
-    --name workflow-orchestrator \
-    --add-data "frontend/dist:frontend/dist" \
-    --hidden-import uvicorn \
-    --hidden-import uvicorn.logging \
-    --hidden-import uvicorn.loops \
-    --hidden-import uvicorn.loops.auto \
-    --hidden-import uvicorn.protocols \
-    --hidden-import uvicorn.protocols.http \
-    --hidden-import uvicorn.protocols.http.auto \
-    --hidden-import uvicorn.protocols.websockets \
-    --hidden-import uvicorn.protocols.websockets.auto \
-    --hidden-import uvicorn.lifespan \
-    --hidden-import uvicorn.lifespan.on \
-    --hidden-import fastapi \
-    --hidden-import sse_starlette \
-    --hidden-import pydantic \
-    backend/app.py
-
-# Copy the built executable to output
-RUN cp dist/workflow-orchestrator /app/dist/workflow-orchestrator-linux
-DOCKERFILE
-
-# Build the Docker image
-echo "Building Docker image..."
-docker build -f Dockerfile.build -t workflow-builder .
-
-# Extract the built executable
-echo "Extracting built executable..."
-mkdir -p "$SCRIPT_DIR/dist"
-docker create --name temp-container workflow-builder
-docker cp temp-container:/app/dist/workflow-orchestrator-linux "$SCRIPT_DIR/dist/workflow-orchestrator"
-docker rm temp-container
-
-# Cleanup
-echo "Cleaning up..."
-rm -f Dockerfile.build
-docker rmi workflow-builder 2>/dev/null || true
+echo "Step 2: Cleaning up..."
+rm -f "$SCRIPT_DIR/workflow_orchestrator.spec"
+rm -rf "$SCRIPT_DIR/build/"
 
 echo ""
 echo "=== Build Complete ==="
@@ -105,8 +128,8 @@ echo ""
 echo "To run:"
 echo "  ./dist/workflow-orchestrator"
 echo ""
-echo "The service will be available at http://localhost:9800"
-echo "Open http://localhost:9800 in your browser to see the workflow UI."
+echo "This binary should work on most Linux x86_64 distributions"
+echo "with glibc >= 2.28 (Rocky Linux 8, Ubuntu 20.04+, Debian 10+, etc.)"
 echo ""
-echo "This binary is compatible with Linux x86_64 systems with glibc 2.17+"
-echo "(CentOS 7, Ubuntu 16.04+, Debian 8+, etc.)"
+echo "To target even older systems (glibc 2.17), set BASE_IMAGE:"
+echo "  BASE_IMAGE=centos:7 ./build-linux.sh"
