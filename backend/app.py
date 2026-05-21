@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -231,6 +233,13 @@ async def global_events():
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "workflows": len(workflows)}
+
+
+# Serve frontend static files when running as PyInstaller bundle
+if getattr(sys, 'frozen', False):
+    static_dir = os.path.join(sys._MEIPASS, "frontend", "dist")
+    if os.path.exists(static_dir):
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
 
 
 if __name__ == "__main__":
