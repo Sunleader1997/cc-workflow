@@ -39,11 +39,8 @@ RUN /opt/python/cp311-cp311/bin/pip install --no-cache-dir \
 # Set working directory
 WORKDIR /app
 
-# Copy project files
+# Copy project files (frontend/dist already built on host)
 COPY . .
-
-# Build frontend
-RUN cd frontend && npm install --silent && npm run build
 
 # Build executable with PyInstaller
 RUN cd /app && \
