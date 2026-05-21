@@ -1,6 +1,7 @@
 # Claude Code Workflow Orchestrator
 
 A Vue Flow-based workflow visualization system for Claude Code. When Claude Code starts a task, it automatically creates a visual workflow, waits for user confirmation, then shows real-time progress as each step executes.
+![Uploading 企业微信截图_e70b8a85-f942-4472-b063-2b6a242660c8.png…]()
 
 ## Quick Start
 
