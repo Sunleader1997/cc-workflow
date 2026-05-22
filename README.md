@@ -1,224 +1,71 @@
-# Claude Code Workflow Orchestrator
+# Claude Code 工作流编排 SKILL
 
-![Example](example.png)
+基于 Vue Flow 的 Claude Code 工作流可视化SKILL。
+当 Claude Code 开始执行任务时，会自动编排工作流，等待用户确认后，在页面上实时显示每个步骤的执行进度。
 
-A Vue Flow-based workflow visualization system for Claude Code. When Claude Code starts a task, it automatically creates a visual workflow, waits for user confirmation, then shows real-time progress as each step executes.
+![alt text](example.png)
 
-## Quick Start
+## Claude code 集成
 
-```bash
-# 1. Install dependencies
-cd backend && pip3 install -r requirements.txt && cd ..
-cd frontend && npm install && cd ..
+### 从源码安装SKILL
 
-# 2. Start services
-./start.sh
-
-# 3. Open browser
-open http://localhost:5173
+```sh
+git clone https://github.com/Sunleader1997/cc-workflow.git
+cd cc-workflow
+sh claude-skills/cc-workflow/install_skill.sh
 ```
 
-Done. Claude Code will automatically use the workflow skill when you give it a multi-step task.
+### 更新
 
----
-
-## Prerequisites
-
-| Dependency | Version | Check command |
-|------------|---------|---------------|
-| Python | 3.9+ | `python3 --version` |
-| Node.js | 18+ | `node --version` |
-| npm | 8+ | `npm --version` |
-| Claude Code | latest | `claude --version` |
-
-## Installation
-
-### Step 1: Get the project
-
-```bash
-cd /path/to/cc_work
+```sh
+cd cc-workflow
+git pull
+sh claude-skills/cc-workflow/install_skill.sh
 ```
 
-### Step 2: Install backend (Python/FastAPI)
+### 在 Claude code 中使用
 
-```bash
-cd backend
-pip3 install -r requirements.txt
-cd ..
+![alt text](image.png)
+
+### 访问可视化
+https://sunleader.top:9888
+
+## 自建服务端 - Linux-x86
+
+### 从源码构建 
+
+```sh
+git clone https://github.com/Sunleader1997/cc-workflow.git
+cd cc-workflow
+# 打包构建
+sh pakcage.sh
+# 使用 docker 构建
+# sh package.sh --docker
 ```
 
-This installs: FastAPI, uvicorn, sse-starlette, pydantic.
+### 安装为服务
 
-### Step 3: Install frontend (Vue 3/Vite)
-
-```bash
-cd frontend
-npm install
-cd ..
+```sh
+sh install.sh
+systemctl status cc-workflow
 ```
 
-This installs: Vue 3, Vue Flow, Vite, and related packages.
-
-### Step 4: Verify installation
-
-```bash
-# Check backend dependencies
-python3 -c "import fastapi, uvicorn, sse_starlette; print('Backend OK')"
-
-# Check frontend dependencies
-ls frontend/node_modules/@vue-flow/core/package.json && echo "Frontend OK"
+```sh
+root@asus:~# systemctl status cc-workflow.service 
+● cc-workflow.service - Claude Code Workflow Orchestrator
+     Loaded: loaded (/etc/systemd/system/cc-workflow.service; enabled; preset: enabled)
+     Active: active (running) since Fri 2026-05-22 02:46:47 UTC; 3h 57min ago
+   Main PID: 1378140 (cc-workflow)
+      Tasks: 2 (limit: 18911)
+     Memory: 57.8M (peak: 58.3M)
+        CPU: 42.249s
+     CGroup: /system.slice/cc-workflow.service
+             ├─1378140 /usr/local/bin/cc-workflow
+             └─1378142 /usr/local/bin/cc-workflow
 ```
 
-## Running the Services
+### 访问页面
 
-### Option A: One-command start (recommended)
-
-```bash
-./start.sh
+```sh
+http://${address}:9800
 ```
-
-This script:
-1. Kills any existing processes on ports 9800 and 5173
-2. Starts the FastAPI backend on port 9800
-3. Starts the Vite frontend on port 5173
-4. Shows logs from both services
-
-Press `Ctrl+C` to stop both services.
-
-### Option B: Manual start (two terminals)
-
-**Terminal 1 — Backend:**
-```bash
-cd backend
-python3 app.py
-```
-Output: `Uvicorn running on http://0.0.0.0:9800`
-
-**Terminal 2 — Frontend:**
-```bash
-cd frontend
-npx vite --host
-```
-Output: `Local: http://localhost:5173/`
-
-### Verify services are running
-
-```bash
-# Backend health check
-curl http://localhost:9800/api/health
-# Expected: {"status":"ok","workflows":0}
-
-# Frontend — open in browser
-open http://localhost:5173
-```
-
-## Installing the Skill
-
-The skill is already included at `.claude/skills/workflow.md`. Claude Code automatically discovers skills in `.claude/skills/` — no manual installation needed.
-
-To verify:
-```bash
-cat .claude/skills/workflow.md | head -5
-```
-
-The skill activates automatically when Claude Code starts in this project directory.
-
-## Using the Skill
-
-### How it works
-
-1. You give Claude Code a multi-step task
-2. Claude Code creates a workflow graph and posts it to the API
-3. The workflow appears on http://localhost:5173 for your review
-4. You can modify nodes/edges, then click **"Confirm Workflow"**
-5. Claude Code detects the confirmation and starts executing
-6. Each node updates in real-time as work progresses
-
-### Example
-
-```
-You: Create a REST API with user authentication and tests
-
-Claude Code automatically:
-  → Creates workflow with 4 steps
-  → Shows it on the UI
-  → Waits for you to confirm
-  → Executes each step with live status updates
-```
-
-### Node status indicators
-
-| Status | Icon | Visual |
-|--------|------|--------|
-| `pending` | ⏳ | Gray border |
-| `in_progress` | ⚡ | Blue border + pulsing glow |
-| `completed` | ✅ | Green border |
-| `failed` | ❌ | Red border |
-
-## Troubleshooting
-
-### Port already in use
-```bash
-# Kill processes on ports 9800 and 5173
-lsof -ti:9800 | xargs kill -9
-lsof -ti:5173 | xargs kill -9
-```
-
-### Backend won't start
-```bash
-# Check Python dependencies
-pip3 install -r backend/requirements.txt
-
-# Check for errors
-cd backend && python3 app.py
-```
-
-### Frontend won't start
-```bash
-# Reinstall dependencies
-cd frontend && rm -rf node_modules && npm install
-```
-
-### SSE not showing real-time updates
-- Open browser console (F12) and look for `[SSE]` logs
-- Ensure backend is running: `curl http://localhost:9800/api/health`
-- The workflow must be selected in the sidebar to receive SSE events
-
-## Project Structure
-
-```
-cc_work/
-├── backend/
-│   ├── app.py              # FastAPI server (REST + SSE)
-│   ├── models.py           # Pydantic data models
-│   └── requirements.txt    # Python dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── App.vue         # Main UI with Vue Flow
-│   │   ├── components/
-│   │   │   └── WorkflowNode.vue  # Custom node component
-│   │   └── main.js         # Entry point
-│   ├── index.html
-│   ├── package.json        # Node.js dependencies
-│   └── vite.config.js      # Vite config with API proxy
-├── .claude/skills/
-│   └── workflow.md         # Claude Code skill definition
-├── CLAUDE.md               # Project context for Claude Code
-├── README.md               # English documentation
-├── README_zh.md            # Chinese documentation
-└── start.sh                # One-command startup script
-```
-
-## API Reference
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/workflows` | Create a workflow |
-| `GET` | `/api/workflows` | List all workflows |
-| `GET` | `/api/workflows/:id` | Get workflow by ID |
-| `PUT` | `/api/workflows/:id` | Update workflow |
-| `DELETE` | `/api/workflows/:id` | Delete workflow |
-| `POST` | `/api/workflows/:id/confirm` | User confirms workflow |
-| `POST` | `/api/workflows/:id/nodes/:nodeId/status` | Update node progress |
-| `GET` | `/api/workflows/:id/events` | SSE stream for workflow |
-| `GET` | `/api/health` | Health check |
