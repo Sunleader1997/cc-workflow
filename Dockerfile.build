@@ -113,8 +113,9 @@ RUN echo "=== GLIBC dependencies ===" && \
     readelf -V ./dist/cc-workflow | grep GLIBC | sort -u | head -20 || true
 
 # ============================================================================
-# Stage 3: Export the binary
+# Stage 3: Export helper stage
+# Keeps the binary in a known location for docker run extraction
 # ============================================================================
-FROM scratch AS export
+FROM binary-builder AS export
 
-COPY --from=binary-builder /build/dist/cc-workflow /
+# Binary is already at /build/dist/cc-workflow from stage 2

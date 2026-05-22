@@ -103,27 +103,21 @@ build_with_docker() {
     # Clean old binary
     rm -f "$BIN_DIR/cc-workflow"
 
-    # Build using Docker BuildKit with output to local directory
+    # Build Docker image
     log_info "Building Docker image (this may take a few minutes)..."
     DOCKER_BUILDKIT=1 docker build \
         -f "$DOCKERFILE" \
-        --output "type=local,dest=$BIN_DIR" \
+        --target export \
+        -t "cc-workflow-build:latest" \
         --progress=plain \
-        "$SCRIPT_DIR" 2>&1 | while IFS= read -r line; do
-            # Filter progress output for readability
-            case "$line" in
-                *"GLIBC dependencies"*)
-                    echo ""
-                    log_info "=== Binary GLIBC Dependencies ==="
-                    ;;
-                *"GLIBC_2."*)
-                    echo "  $line"
-                    ;;
-                *"Step"*)
-                    echo "  $line"
-                    ;;
-            esac
-        done
+        "$SCRIPT_DIR"
+
+    # Extract binary from built image using docker run + volume mount
+    log_info "Extracting binary from container..."
+    docker run --rm \
+        -v "$BIN_DIR:/output" \
+        "cc-workflow-build:latest" \
+        cp /build/dist/cc-workflow /output/cc-workflow
 
     # Verify output
     OUTPUT="$BIN_DIR/cc-workflow"
