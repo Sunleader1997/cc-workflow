@@ -48,14 +48,23 @@ COPY backend/ ./backend/
 # Copy built frontend from stage 1
 COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
-# Create PyInstaller spec
-RUN cat > workflow.spec << 'EOF'
+# Verify Python version and paths before building
+RUN echo "=== Python Version ===" && python --version && \
+    echo "=== Python Executable ===" && which python && \
+    echo "=== Python Path ===" && python -c "import sys; print('\n'.join(sys.path))" && \
+    echo "=== libpython ===" && python -c "import sysconfig; print(sysconfig.get_config_var('LDLIBRARY'))"
+
+# Determine Python 3.11 site-packages path for PyInstaller pathex
+RUN python -c "import site; print(site.getsitepackages()[0])" > /tmp/sitepackages.txt
+
+# Create PyInstaller spec with explicit Python 3.11 paths
+RUN PYTHON_SITE=$(cat /tmp/sitepackages.txt) && cat > workflow.spec << EOF
 # -*- mode: python ; coding: utf-8 -*-
 block_cipher = None
 
 a = Analysis(
     ['backend/app.py'],
-    pathex=[],
+    pathex=['$PYTHON_SITE'],
     binaries=[],
     datas=[('frontend/dist', 'frontend/dist')],
     hiddenimports=[
@@ -73,6 +82,13 @@ a = Analysis(
         'fastapi',
         'sse_starlette',
         'pydantic',
+        'pydantic.deprecated',
+        'pydantic.deprecated.decorator',
+        'pydantic.v1',
+        'pydantic_core',
+        'pydantic_core._pydantic_core',
+        'email_validator',
+        'typing_extensions',
     ],
     hookspath=[],
     hooksconfig={},

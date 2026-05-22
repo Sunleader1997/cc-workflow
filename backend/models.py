@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel
 
 
@@ -42,8 +42,8 @@ class Workflow(BaseModel):
     id: str
     title: str
     description: str = ""
-    nodes: list[WorkflowNode] = []
-    edges: list[WorkflowEdge] = []
+    nodes: List[WorkflowNode] = []
+    edges: List[WorkflowEdge] = []
     status: str = "pending_user_confirm"  # pending_user_confirm | confirmed | running | completed | failed
     created_at: str = ""
     updated_at: str = ""
@@ -52,8 +52,8 @@ class Workflow(BaseModel):
 class WorkflowCreate(BaseModel):
     title: str
     description: str = ""
-    nodes: list[WorkflowNode] = []
-    edges: list[WorkflowEdge] = []
+    nodes: List[WorkflowNode] = []
+    edges: List[WorkflowEdge] = []
 
 
 class NodeStatusUpdate(BaseModel):
@@ -64,6 +64,6 @@ class NodeStatusUpdate(BaseModel):
 class WorkflowUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    nodes: Optional[list[WorkflowNode]] = None
-    edges: Optional[list[WorkflowEdge]] = None
+    nodes: Optional[List[WorkflowNode]] = None
+    edges: Optional[List[WorkflowEdge]] = None
     status: Optional[str] = None

@@ -6,7 +6,7 @@ import os
 import sys
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Dict, List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,11 +36,11 @@ app.add_middleware(
 )
 
 # In-memory storage
-workflows: dict[str, Workflow] = {}
+workflows: Dict[str, Workflow] = {}
 # SSE subscribers per workflow: workflow_id -> list of asyncio.Queue
-_subscribers: dict[str, list[asyncio.Queue]] = {}
+_subscribers: Dict[str, List[asyncio.Queue]] = {}
 # Global event stream subscribers (all workflow events)
-_global_subscribers: list[asyncio.Queue] = []
+_global_subscribers: List[asyncio.Queue] = []
 
 
 def _now() -> str:
@@ -77,7 +77,7 @@ async def create_workflow(body: WorkflowCreate):
     return wf
 
 
-@app.get("/api/workflows", response_model=list[Workflow])
+@app.get("/api/workflows", response_model=List[Workflow])
 async def list_workflows():
     return list(workflows.values())
 
