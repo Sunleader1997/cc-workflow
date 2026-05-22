@@ -1,0 +1,120 @@
+# Multi-stage Dockerfile for building cc-workflow binary with old GLIBC compatibility
+# Uses manylinux2014 (CentOS 7, GLIBC 2.17) for maximum compatibility
+#
+# Build command:
+#   docker build -f Dockerfile.build --output type=local,dest=./bin .
+#
+# Or use the updated package.sh with --docker flag
+
+# ============================================================================
+# Stage 1: Build frontend (Node.js)
+# ============================================================================
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /build
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci
+
+COPY frontend/ ./frontend/
+RUN cd frontend && npm run build
+
+# ============================================================================
+# Stage 2: Build Python binary with PyInstaller (manylinux2014 = GLIBC 2.17)
+# ============================================================================
+FROM quay.io/pypa/manylinux2014_x86_64 AS binary-builder
+
+# Use Python 3.11 from manylinux
+ENV PYROOT=/opt/python/cp311-cp311
+ENV PATH="${PYROOT}/bin:${PATH}"
+ENV PYTHON="${PYROOT}/bin/python"
+ENV PIP="${PYROOT}/bin/pip"
+
+# Upgrade pip and install build tools
+RUN $PIP install --upgrade pip setuptools wheel
+
+WORKDIR /build
+
+# Install Python dependencies and PyInstaller
+COPY backend/requirements.txt ./backend/
+RUN $PIP install -r backend/requirements.txt pyinstaller
+
+# Copy backend source
+COPY backend/ ./backend/
+
+# Copy built frontend from stage 1
+COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
+
+# Create PyInstaller spec
+RUN cat > workflow.spec << 'EOF'
+# -*- mode: python ; coding: utf-8 -*-
+block_cipher = None
+
+a = Analysis(
+    ['backend/app.py'],
+    pathex=[],
+    binaries=[],
+    datas=[('frontend/dist', 'frontend/dist')],
+    hiddenimports=[
+        'uvicorn',
+        'uvicorn.logging',
+        'uvicorn.loops',
+        'uvicorn.loops.auto',
+        'uvicorn.protocols',
+        'uvicorn.protocols.http',
+        'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.websockets',
+        'uvicorn.protocols.websockets.auto',
+        'uvicorn.lifespan',
+        'uvicorn.lifespan.on',
+        'fastapi',
+        'sse_starlette',
+        'pydantic',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='cc-workflow',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=True,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+EOF
+
+# Build the executable
+RUN pyinstaller --clean --distpath ./dist --workpath ./.build workflow.spec
+
+# Verify GLIBC dependencies (for debugging)
+RUN echo "=== GLIBC dependencies ===" && \
+    readelf -V ./dist/cc-workflow | grep GLIBC | sort -u | head -20 || true
+
+# ============================================================================
+# Stage 3: Export the binary
+# ============================================================================
+FROM scratch AS export
+
+COPY --from=binary-builder /build/dist/cc-workflow /
