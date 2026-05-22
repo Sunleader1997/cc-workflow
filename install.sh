@@ -4,7 +4,7 @@
 set -e
 
 SERVICE_NAME="cc-workflow"
-EXEC_SRC="./dist/workflow-orchestrator"
+EXEC_SRC="./bin/cc-workflow"
 EXEC_DST="/usr/local/bin/${SERVICE_NAME}"
 SERVICE_DST="/etc/systemd/system/${SERVICE_NAME}.service"
 
@@ -35,7 +35,7 @@ fi
 # Check executable exists
 if [ ! -f "$EXEC_SRC" ]; then
     log_error "Executable not found: $EXEC_SRC"
-    log_info "Run ./build.sh first to build the executable."
+    log_info "Run ./package.sh first to build the executable."
     exit 1
 fi
 
