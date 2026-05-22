@@ -23,20 +23,34 @@ RUN cd frontend && npm run build
 # ============================================================================
 FROM quay.io/pypa/manylinux2014_x86_64 AS binary-builder
 
-# Use Python 3.11 from manylinux
-ENV PYROOT=/opt/python/cp311-cp311
-ENV PATH="${PYROOT}/bin:${PATH}"
-ENV PYTHON="${PYROOT}/bin/python"
-ENV PIP="${PYROOT}/bin/pip"
+# Manylinux's pre-installed Python is statically linked (no libpython.so).
+# PyInstaller requires a shared library, so we build Python from source.
+RUN yum install -y zlib-devel bzip2 bzip2-devel readline-devel \
+    sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+
+# Build Python 3.11 with --enable-shared
+ENV PYTHON_VERSION=3.11.9
+RUN cd /tmp && \
+    curl -sL https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar xz && \
+    cd Python-${PYTHON_VERSION} && \
+    ./configure --prefix=/opt/python311 --enable-shared --enable-optimizations && \
+    make -j$(nproc) && \
+    make install && \
+    cd .. && rm -rf Python-${PYTHON_VERSION} && \
+    ln -sf /opt/python311/bin/python3 /opt/python311/bin/python && \
+    ln -sf /opt/python311/bin/pip3 /opt/python311/bin/pip
+
+ENV PATH="/opt/python311/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/python311/lib:${LD_LIBRARY_PATH}"
 
 # Upgrade pip and install build tools
-RUN $PIP install --upgrade pip setuptools wheel
+RUN pip install --upgrade pip setuptools wheel
 
 WORKDIR /build
 
 # Install Python dependencies and PyInstaller
 COPY backend/requirements.txt ./backend/
-RUN $PIP install -r backend/requirements.txt pyinstaller
+RUN pip install -r backend/requirements.txt pyinstaller
 
 # Copy backend source
 COPY backend/ ./backend/
