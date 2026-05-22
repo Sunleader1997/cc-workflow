@@ -30,12 +30,13 @@ RUN dnf install -y python3.11 python3.11-devel python3.11-pip gcc && \
     dnf clean all
 
 ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/usr/lib64:${LD_LIBRARY_PATH}"
-
-# Upgrade pip and install build tools
-RUN pip install --upgrade pip setuptools wheel
+ENV LD_LIBRARY_PATH="/usr/lib64"
 
 WORKDIR /build
+
+# Use Aliyun PyPI mirror for faster downloads in China
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/ && \
+    pip config set global.trusted-host mirrors.aliyun.com
 
 # Install Python dependencies and PyInstaller
 COPY backend/requirements.txt ./backend/
