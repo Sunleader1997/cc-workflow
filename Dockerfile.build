@@ -50,7 +50,6 @@ COPY --from=frontend-builder /build/frontend/dist ./frontend/dist
 
 # Verify Python version and paths before building
 RUN echo "=== Python Version ===" && python --version && \
-    echo "=== Python Executable ===" && which python && \
     echo "=== Python Path ===" && python -c "import sys; print('\n'.join(sys.path))" && \
     echo "=== libpython ===" && python -c "import sysconfig; print(sysconfig.get_config_var('LDLIBRARY'))"
 
