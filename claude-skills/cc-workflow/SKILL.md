@@ -1,5 +1,5 @@
 ---
-name: workflow
+name: cc-workflow
 description: >
   Orchestrate and visualize task workflows on a Vue Flow interactive graph.
   Use this skill proactively at the START of any multi-step task (3+ steps) to
