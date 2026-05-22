@@ -5,8 +5,8 @@
 set -e
 
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="${HOME}/.claude/skills/workflow"
-SKILL_NAME="workflow"
+TARGET_DIR="${HOME}/.claude/skills/cc-workflow"
+SKILL_NAME="cc-workflow"
 
 echo "Installing skill: ${SKILL_NAME}"
 echo "Source: ${SOURCE_DIR}"
