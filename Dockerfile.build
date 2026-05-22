@@ -1,10 +1,9 @@
 # Multi-stage Dockerfile for building cc-workflow binary with old GLIBC compatibility
-# Uses manylinux2014 (CentOS 7, GLIBC 2.17) for maximum compatibility
+# Uses AlmaLinux 8 (GLIBC 2.28) for wide Linux compatibility.
+# GLIBC 2.28 covers: CentOS/RHEL/Rocky/Alma 8+, Ubuntu 20.04+, Debian 10+
 #
 # Build command:
-#   docker build -f Dockerfile.build --output type=local,dest=./bin .
-#
-# Or use the updated package.sh with --docker flag
+#   ./package.sh --docker
 
 # ============================================================================
 # Stage 1: Build frontend (Node.js)
@@ -19,29 +18,19 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
 # ============================================================================
-# Stage 2: Build Python binary with PyInstaller (manylinux2014 = GLIBC 2.17)
+# Stage 2: Build Python binary with PyInstaller (AlmaLinux 8 = GLIBC 2.28)
 # ============================================================================
-FROM quay.io/pypa/manylinux2014_x86_64 AS binary-builder
+FROM almalinux:8 AS binary-builder
 
-# Manylinux's pre-installed Python is statically linked (no libpython.so).
-# PyInstaller requires a shared library, so we build Python from source.
-RUN yum install -y zlib-devel bzip2 bzip2-devel readline-devel \
-    sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+# Install Python 3.11 with shared library + gcc for PyInstaller bootloader
+RUN dnf install -y python3.11 python3.11-devel python3.11-pip gcc && \
+    alternatives --set python3 /usr/bin/python3.11 && \
+    ln -sf /usr/bin/python3.11 /usr/local/bin/python && \
+    ln -sf /usr/bin/pip3.11 /usr/local/bin/pip && \
+    dnf clean all
 
-# Build Python 3.11 with --enable-shared
-ENV PYTHON_VERSION=3.11.9
-RUN cd /tmp && \
-    curl -sL https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz | tar xz && \
-    cd Python-${PYTHON_VERSION} && \
-    ./configure --prefix=/opt/python311 --enable-shared --enable-optimizations && \
-    make -j$(nproc) && \
-    make install && \
-    cd .. && rm -rf Python-${PYTHON_VERSION} && \
-    ln -sf /opt/python311/bin/python3 /opt/python311/bin/python && \
-    ln -sf /opt/python311/bin/pip3 /opt/python311/bin/pip
-
-ENV PATH="/opt/python311/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/python311/lib:${LD_LIBRARY_PATH}"
+ENV PATH="/usr/local/bin:/usr/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/lib64:${LD_LIBRARY_PATH}"
 
 # Upgrade pip and install build tools
 RUN pip install --upgrade pip setuptools wheel
